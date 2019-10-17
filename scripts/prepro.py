@@ -111,12 +111,16 @@ def create_data_mats(data, params, dtype):
     max_cap_len = params.max_cap_len
     captions = np.zeros([num_threads, max_cap_len])
     caption_len = np.zeros(num_threads, dtype=np.int)
+    conversation_ids = np.zeros(num_threads, dtype=np.int)
+
 
     for i, dialog in enumerate(tqdm(data['data']['dialogs'])):
         caption_len[i] = len(dialog['caption_tokens'][0:max_cap_len])
         captions[i][0:caption_len[i]] = dialog['caption_tokens'][0:max_cap_len]
+        conversation_ids[i] = dialog['conversation_id']
     data_mats['cap_length'] = caption_len
     data_mats['cap'] = captions
+    data_mats['conv_id'] = conversation_ids
 
     print("[%s] Creating question and answer data matrices..." % data['split'])
     num_rounds = 10
@@ -162,11 +166,15 @@ def create_data_mats(data, params, dtype):
     data_mats['opt'] = options
 
     if dtype != 'test':
+        #import pdb;pdb.set_trace()
         print("[%s] Creating ground truth answer data matrices..." % data['split'])
         answer_index = np.zeros([num_threads, num_rounds])
         for i, dialog in enumerate(tqdm(data['data']['dialogs'])):
             for j in range(num_rounds):
-                answer_index[i][j] = dialog['dialog'][j]['gt_index'] + 1
+                if dialog['dialog'][j]['question'] == -1 and dialog['dialog'][j]['answer'] == -1:
+                    answer_index[i][j] = 0
+                else:
+                    answer_index[i][j] = dialog['dialog'][j]['gt_index'] + 1
         data_mats['ans_index'] = answer_index
 
     options_len = np.zeros(len(data['data']['answer_tokens']), dtype=np.int)
@@ -250,9 +258,11 @@ if __name__ == "__main__":
     data_test = encode_vocab(data_test, word2ind)
 
     print('Creating data matrices...')
+    #import pdb;pdb.set_trace()
     data_mats_train = create_data_mats(data_train, args, 'train')
     data_mats_val = create_data_mats(data_val, args, 'val')
     data_mats_test = create_data_mats(data_test, args, 'test')
+
 
     if args.train_split == 'trainval':
         data_mats_trainval = {}
@@ -295,3 +305,4 @@ if __name__ == "__main__":
         out.pop('unique_img_val')
     print('Saving json to %s...' % args.output_json)
     json.dump(out, open(args.output_json, 'w'))
+
