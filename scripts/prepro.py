@@ -225,9 +225,9 @@ if __name__ == "__main__":
     data_val = json.load(open(args.input_json_val, 'r'))
     data_test = json.load(open(args.input_json_test, 'r'))
 
-    add_dialog_ids(data_train)
-    add_dialog_ids(data_val)
-    add_dialog_ids(data_test)
+    #add_dialog_ids(data_train)
+    #add_dialog_ids(data_val)
+    #add_dialog_ids(data_test)
 
     # Tokenizing
     data_train, word_counts_train = tokenize_data(data_train, True)
