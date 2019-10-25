@@ -6,6 +6,7 @@ import os
 import numpy as np
 from nltk.tokenize import word_tokenize
 from tqdm import tqdm
+import copy
 
 
 parser = argparse.ArgumentParser()
@@ -29,6 +30,15 @@ parser.add_argument('-max_ques_len', default=20, type=int, help='Max length of q
 parser.add_argument('-max_ans_len', default=20, type=int, help='Max length of answers')
 parser.add_argument('-max_cap_len', default=40, type=int, help='Max length of captions')
 parser.add_argument('-word_count_threshold', default=5, type=int, help='Min threshold of word count to include in vocabulary')
+
+# Categories (replaces of "Input files" and "Output files" groups)
+parser.add_argument('-category_names', default='["cat1","cat2","cat3"]', help='Input list of category names')
+parser.add_argument('-input_json_train_dir', default='visdial_1.0_train.json', help='Input `train` json file')
+parser.add_argument('-input_json_val_dir', default='visdial_1.0_val.json', help='Input `val` json file')
+parser.add_argument('-input_json_test_dir', default='visdial_1.0_test.json', help='Input `test` json file')
+parser.add_argument('-output_json_dir', default='visdial_params.json', help='Output json file')
+parser.add_argument('-output_h5_dir', default='visdial_data.h5', help='Output hdf5 file')
+
 
 
 def tokenize_data(data, word_count=False):
@@ -166,7 +176,6 @@ def create_data_mats(data, params, dtype):
     data_mats['opt'] = options
 
     if dtype != 'test':
-        #import pdb;pdb.set_trace()
         print("[%s] Creating ground truth answer data matrices..." % data['split'])
         answer_index = np.zeros([num_threads, num_rounds])
         for i, dialog in enumerate(tqdm(data['data']['dialogs'])):
@@ -195,14 +204,22 @@ def get_image_ids(data, id2path):
         image_ids[i] = id2path[image_id]
     return image_ids
 
-def add_dialog_ids(data):
-    for i, entry in enumerate(data['data']['dialogs']):
-        entry["conversation_id"] = i
+def main_category(args):
+    category_names = json.loads(args.category_names)
+    args_copy = copy.deepcopy(args)
+    for cat_name in category_names:
+        args_copy.input_json_train = os.path.join(args.input_json_train_dir, cat_name+".json")
+        args_copy.input_json_val = os.path.join(args.input_json_val_dir, cat_name+".json")
+        args_copy.input_json_test = args.input_json_test
+        args_copy.output_json = os.path.join(args.output_json_dir, "visdial_params_"+cat_name+".json")
+        args_copy.output_h5 = os.path.join(args.output_h5_dir, "visdial_data_"+cat_name+".h5")
+        print('='*80)
+        print('='*80)
+        print("Preprocessing data for category \"{}\".".format(cat_name))
+        main(args_copy)
 
 
-if __name__ == "__main__":
-    args = parser.parse_args()
-
+def main(args):
     if args.download:
         if args.version == '1.0':
             os.system('wget -nc -O data/visdial_1.0_train.zip https://www.dropbox.com/s/ix8keeudqrd8hn8/visdial_1.0_train.zip')
@@ -224,10 +241,6 @@ if __name__ == "__main__":
     data_train = json.load(open(args.input_json_train, 'r'))
     data_val = json.load(open(args.input_json_val, 'r'))
     data_test = json.load(open(args.input_json_test, 'r'))
-
-    #add_dialog_ids(data_train)
-    #add_dialog_ids(data_val)
-    #add_dialog_ids(data_test)
 
     # Tokenizing
     data_train, word_counts_train = tokenize_data(data_train, True)
@@ -266,7 +279,6 @@ if __name__ == "__main__":
     data_test = encode_vocab(data_test, word2ind)
 
     print('Creating data matrices...')
-    #import pdb;pdb.set_trace()
     data_mats_train = create_data_mats(data_train, args, 'train')
     data_mats_val = create_data_mats(data_val, args, 'val')
     data_mats_test = create_data_mats(data_test, args, 'test')
@@ -312,5 +324,14 @@ if __name__ == "__main__":
         out.pop('unique_img_val')
     print('Saving json to %s...' % args.output_json)
     json.dump(out, open(args.output_json, 'w'))
+
+
+if __name__ == "__main__":
+    args = parser.parse_args()
+
+    if args.category_names:
+        main_category(args)
+    else:
+        main(args)
 
 
