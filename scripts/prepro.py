@@ -32,7 +32,7 @@ parser.add_argument('-max_cap_len', default=40, type=int, help='Max length of ca
 parser.add_argument('-word_count_threshold', default=5, type=int, help='Min threshold of word count to include in vocabulary')
 
 # Categories (replaces of "Input files" and "Output files" groups)
-parser.add_argument('-category_names', default='["cat1","cat2","cat3"]', help='Input list of category names')
+parser.add_argument('-category_names', help='Input list of category names; eg: ["cat1","cat2","cat3"]')
 parser.add_argument('-input_json_train_dir', default='visdial_1.0_train.json', help='Input `train` json file')
 parser.add_argument('-input_json_val_dir', default='visdial_1.0_val.json', help='Input `val` json file')
 parser.add_argument('-input_json_test_dir', default='visdial_1.0_test.json', help='Input `test` json file')
