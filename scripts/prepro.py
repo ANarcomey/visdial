@@ -13,6 +13,14 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-download', action='store_true', help='Whether to download VisDial data')
 parser.add_argument('-version', default='1.0', choices=['0.9', '1.0'], help='Version of VisDial to be downloaded')
 parser.add_argument('-train_split', default='train', help='Choose the data split: train | trainval', choices=['train', 'trainval'])
+parser.add_argument('-skip_train', action='store_true', help='Choose to exclude training data from the preprocessed data')
+parser.add_argument('-exclude_test_gt', action='store_true', help='Exclude ground truth in `test` split')
+parser.add_argument('-custom_vocab_output_suffix', default='', help='suffix for json and hdf5 outputs with custom vocabularies')
+
+parser.add_argument('-mode', help='Choose mode of category-specific preprocessing')
+
+
+
 
 # Input files
 parser.add_argument('-input_json_train', default='visdial_1.0_train.json', help='Input `train` json file')
@@ -31,13 +39,16 @@ parser.add_argument('-max_ans_len', default=20, type=int, help='Max length of an
 parser.add_argument('-max_cap_len', default=40, type=int, help='Max length of captions')
 parser.add_argument('-word_count_threshold', default=5, type=int, help='Min threshold of word count to include in vocabulary')
 
-# Categories (replaces of "Input files" and "Output files" groups)
+# Categories (wrappers around "Input files" and "Output files" groups)
 parser.add_argument('-category_names', help='Input list of category names; eg: ["cat1","cat2","cat3"]')
-parser.add_argument('-input_json_train_dir', default='visdial_1.0_train.json', help='Input `train` json file')
-parser.add_argument('-input_json_val_dir', default='visdial_1.0_val.json', help='Input `val` json file')
-parser.add_argument('-input_json_test_dir', default='visdial_1.0_test.json', help='Input `test` json file')
-parser.add_argument('-output_json_dir', default='visdial_params.json', help='Output json file')
-parser.add_argument('-output_h5_dir', default='visdial_data.h5', help='Output hdf5 file')
+parser.add_argument('-input_json_train_dir', help='Input `train` json file')
+parser.add_argument('-input_json_val_dir', help='Input `val` json file')
+parser.add_argument('-input_json_test_dir', help='Input `test` json file')
+parser.add_argument('-output_json_dir', help='Output json file')
+parser.add_argument('-output_h5_dir', help='Output hdf5 file')
+parser.add_argument('-input_vocab_dir', help='Directory for input vocabulary json files')
+parser.add_argument('-input_vocab_all_categories', help='Input vocabulary json file covering data from all categories')
+
 
 
 
@@ -175,7 +186,7 @@ def create_data_mats(data, params, dtype):
     data_mats['num_rounds'] = num_rounds_list
     data_mats['opt'] = options
 
-    if dtype != 'test':
+    if not (dtype == 'test' and params.exclude_test_gt):
         print("[%s] Creating ground truth answer data matrices..." % data['split'])
         answer_index = np.zeros([num_threads, num_rounds])
         for i, dialog in enumerate(tqdm(data['data']['dialogs'])):
@@ -205,18 +216,79 @@ def get_image_ids(data, id2path):
     return image_ids
 
 def main_category(args):
+
     category_names = json.loads(args.category_names)
-    args_copy = copy.deepcopy(args)
-    for cat_name in category_names:
-        args_copy.input_json_train = os.path.join(args.input_json_train_dir, cat_name+".json")
-        args_copy.input_json_val = os.path.join(args.input_json_val_dir, cat_name+".json")
-        args_copy.input_json_test = args.input_json_test
-        args_copy.output_json = os.path.join(args.output_json_dir, "visdial_params_"+cat_name+".json")
-        args_copy.output_h5 = os.path.join(args.output_h5_dir, "visdial_data_"+cat_name+".h5")
-        print('='*80)
-        print('='*80)
-        print("Preprocessing data for category \"{}\".".format(cat_name))
-        main(args_copy)
+    #import pdb;pdb.set_trace()
+    if args.mode == "category_datasets":
+        print("Preprocessing in category_datasets mode.")
+
+        for cat_name in category_names:
+
+            #Create datasets filtered by this category
+            args_copy = copy.deepcopy(args)
+
+            output_json_dir_category = os.path.join(args.output_json_dir, cat_name)
+            output_h5_dir_category = os.path.join(args.output_h5_dir, cat_name)
+            if not os.path.exists(output_json_dir_category): os.makedirs(output_json_dir_category)
+            if not os.path.exists(output_h5_dir_category): os.makedirs(output_h5_dir_category)
+
+            args_copy.input_json_train = os.path.join(args.input_json_train_dir, cat_name+".json")
+            args_copy.input_json_val = os.path.join(args.input_json_val_dir, cat_name+".json")
+            args_copy.input_json_test = args.input_json_test
+            args_copy.output_json = os.path.join(output_json_dir_category, 
+                                        "params_vocab_from_"+cat_name+args.custom_vocab_output_suffix+".json")
+            args_copy.output_h5 = os.path.join(output_h5_dir_category, 
+                                        "data_vocab_from_"+cat_name+args.custom_vocab_output_suffix+".h5")
+            main(args_copy)
+
+            #Create dataset filtered by this category with vocabulary from all categories (for evaluation on all categories)
+            args_copy2 = copy.deepcopy(args_copy)
+            args_copy2.input_vocab = args.input_vocab_all_categories
+            args_copy2.output_json = os.path.join(output_json_dir_category, 
+                                        "params_vocab_from_all_categories.json")
+            args_copy2.output_h5 = os.path.join(output_h5_dir_category, 
+                                        "data_vocab_from_all_categories.h5")
+            main(args_copy2)
+
+    elif args.mode == "category_vocabs":
+        print("Preprocessing in category_vocabs mode")
+        for cat_name in category_names:
+
+            #Create datasets of all categories with vocabulary from each single category
+            args_copy = copy.deepcopy(args)
+            args_copy.input_vocab = os.path.join(args.input_vocab_dir, cat_name, 
+                                        "params_vocab_from_"+cat_name+args.custom_vocab_output_suffix+".json")
+
+            args_copy.output_json = os.path.join(args.output_json_dir, 
+                                        "params_vocab_from_"+cat_name+args.custom_vocab_output_suffix+".json")
+            args_copy.output_h5 = os.path.join(args.output_h5_dir, 
+                                        "data_vocab_from_"+cat_name+args.custom_vocab_output_suffix+".h5")
+            main(args_copy)
+
+    else:
+        print("Mode {} not supported. Returning.")
+
+    '''if args.input_vocab_dir:
+        for cat_name in category_names:
+            args_copy.input_vocab = os.path.join(args.input_vocab_dir, "visdial_params_"+cat_name+".json")
+            args_copy.output_h5 = os.path.join(args.output_h5_dir, "data_vocab_from_"+cat_name+args.custom_vocab_output_suffix+".h5")
+            args_copy.output_json = os.path.join(args.output_json_dir, "params_vocab_from_"+cat_name+args.custom_vocab_output_suffix+".json")
+            print('='*80)
+            print('='*80)
+            print("Preprocessing data for category \"{}\".".format(cat_name))
+            main(args_copy)
+    else:
+        for cat_name in category_names:
+            args_copy.input_json_train = os.path.join(args.input_json_train_dir, cat_name+".json")
+            args_copy.input_json_val = os.path.join(args.input_json_val_dir, cat_name+".json")
+            args_copy.input_json_test = args.input_json_test
+            args_copy.output_json = os.path.join(args.output_json_dir, "visdial_params_"+cat_name+".json")
+            args_copy.output_h5 = os.path.join(args.output_h5_dir, "visdial_data_"+cat_name+".h5")
+            print('='*80)
+            print('='*80)
+            print("Preprocessing data for category \"{}\".".format(cat_name))
+            main(args_copy)
+    '''
 
 
 def main(args):
@@ -237,17 +309,21 @@ def main(args):
         args.input_json_val = 'data/visdial_%s_val.json' % args.version
         args.input_json_test = 'data/visdial_1.0_test.json'
 
+    if args.skip_train:
+        assert args.skip_train and args.input_vocab
+
     print('Reading json...')
-    data_train = json.load(open(args.input_json_train, 'r'))
+    if not args.skip_train: data_train = json.load(open(args.input_json_train, 'r'))
     data_val = json.load(open(args.input_json_val, 'r'))
     data_test = json.load(open(args.input_json_test, 'r'))
 
     # Tokenizing
-    data_train, word_counts_train = tokenize_data(data_train, True)
+    if not args.skip_train: data_train, word_counts_train = tokenize_data(data_train, True)
     data_val, word_counts_val = tokenize_data(data_val, True)
     data_test, _ = tokenize_data(data_test)
 
     if args.input_vocab == False:
+        assert not args.skip_train
         word_counts_all = dict(word_counts_train)
         # combining the word counts of train and val splits
         if args.train_split == 'trainval':
@@ -274,16 +350,17 @@ def main(args):
             ind2word[int(i)] = vocab_data['ind2word'][i]
 
     print('Encoding based on vocabulary...')
-    data_train = encode_vocab(data_train, word2ind)
+    if not args.skip_train: data_train = encode_vocab(data_train, word2ind)
     data_val = encode_vocab(data_val, word2ind)
     data_test = encode_vocab(data_test, word2ind)
 
     print('Creating data matrices...')
-    data_mats_train = create_data_mats(data_train, args, 'train')
+    if not args.skip_train: data_mats_train = create_data_mats(data_train, args, 'train')
     data_mats_val = create_data_mats(data_val, args, 'val')
     data_mats_test = create_data_mats(data_test, args, 'test')
 
     if args.train_split == 'trainval':
+        assert not args.skip_train
         data_mats_trainval = {}
         for key in data_mats_train:
             data_mats_trainval[key] = np.concatenate((data_mats_train[key],
@@ -292,13 +369,15 @@ def main(args):
     print('Saving hdf5 to %s...' % args.output_h5)
     f = h5py.File(args.output_h5, 'w')
     if args.train_split == 'train':
-        for key in data_mats_train:
-            f.create_dataset(key + '_train', dtype='uint32', data=data_mats_train[key])
+        if not args.skip_train: 
+            for key in data_mats_train:
+                f.create_dataset(key + '_train', dtype='uint32', data=data_mats_train[key])
 
         for key in data_mats_val:
             f.create_dataset(key + '_val', dtype='uint32', data=data_mats_val[key])
 
     elif args.train_split == 'trainval':
+        assert not args.skip_train
         for key in data_mats_trainval:
             f.create_dataset(key + '_train', dtype='uint32', data=data_mats_trainval[key])
 
@@ -316,10 +395,11 @@ def main(args):
     for image_path in tqdm(glob.iglob(os.path.join(args.image_root, '*', '*.jpg'))):
         id2path[int(image_path[-12:-4])] = '/'.join(image_path.split('/')[-2:])
 
-    out['unique_img_train'] = get_image_ids(data_train, id2path)
+    if not args.skip_train: out['unique_img_train'] = get_image_ids(data_train, id2path)
     out['unique_img_val'] = get_image_ids(data_val, id2path)
     out['unique_img_test'] = get_image_ids(data_test, id2path)
     if args.train_split == 'trainval':
+        assert not args.skip_train
         out['unique_img_train'] += out['unique_img_val']
         out.pop('unique_img_val')
     print('Saving json to %s...' % args.output_json)
