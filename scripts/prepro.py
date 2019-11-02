@@ -234,7 +234,7 @@ def main_category(args):
 
             args_copy.input_json_train = os.path.join(args.input_json_train_dir, cat_name+".json")
             args_copy.input_json_val = os.path.join(args.input_json_val_dir, cat_name+".json")
-            args_copy.input_json_test = args.input_json_test
+            args_copy.input_json_test = os.path.join(args.input_json_test_dir, cat_name+".json")
             args_copy.output_json = os.path.join(output_json_dir_category, 
                                         "params_vocab_from_"+cat_name+args.custom_vocab_output_suffix+".json")
             args_copy.output_h5 = os.path.join(output_h5_dir_category, 
