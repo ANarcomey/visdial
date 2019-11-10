@@ -16,6 +16,8 @@ parser.add_argument('-train_split', default='train', help='Choose the data split
 parser.add_argument('-skip_train', action='store_true', help='Choose to exclude training data from the preprocessed data')
 parser.add_argument('-exclude_test_gt', action='store_true', help='Exclude ground truth in `test` split')
 parser.add_argument('-custom_vocab_output_suffix', default='', help='suffix for json and hdf5 outputs with custom vocabularies')
+parser.add_argument('-exclude_test', action='store_true', help='Exclude `test` split entirely')
+
 
 parser.add_argument('-mode', help='Choose mode of category-specific preprocessing')
 
@@ -234,7 +236,7 @@ def main_category(args):
 
             args_copy.input_json_train = os.path.join(args.input_json_train_dir, cat_name+".json")
             args_copy.input_json_val = os.path.join(args.input_json_val_dir, cat_name+".json")
-            args_copy.input_json_test = os.path.join(args.input_json_test_dir, cat_name+".json")
+            if not args.exclude_test: args_copy.input_json_test = os.path.join(args.input_json_test_dir, cat_name+".json")
             args_copy.output_json = os.path.join(output_json_dir_category, 
                                         "params_vocab_from_"+cat_name+args.custom_vocab_output_suffix+".json")
             args_copy.output_h5 = os.path.join(output_h5_dir_category, 
@@ -315,12 +317,12 @@ def main(args):
     print('Reading json...')
     if not args.skip_train: data_train = json.load(open(args.input_json_train, 'r'))
     data_val = json.load(open(args.input_json_val, 'r'))
-    data_test = json.load(open(args.input_json_test, 'r'))
+    if not args.exclude_test: data_test = json.load(open(args.input_json_test, 'r'))
 
     # Tokenizing
     if not args.skip_train: data_train, word_counts_train = tokenize_data(data_train, True)
     data_val, word_counts_val = tokenize_data(data_val, True)
-    data_test, _ = tokenize_data(data_test)
+    if not args.exclude_test: data_test, _ = tokenize_data(data_test)
 
     if args.input_vocab == False:
         assert not args.skip_train
@@ -352,12 +354,12 @@ def main(args):
     print('Encoding based on vocabulary...')
     if not args.skip_train: data_train = encode_vocab(data_train, word2ind)
     data_val = encode_vocab(data_val, word2ind)
-    data_test = encode_vocab(data_test, word2ind)
+    if not args.exclude_test: data_test = encode_vocab(data_test, word2ind)
 
     print('Creating data matrices...')
     if not args.skip_train: data_mats_train = create_data_mats(data_train, args, 'train')
     data_mats_val = create_data_mats(data_val, args, 'val')
-    data_mats_test = create_data_mats(data_test, args, 'test')
+    if not args.exclude_test: data_mats_test = create_data_mats(data_test, args, 'test')
 
     if args.train_split == 'trainval':
         assert not args.skip_train
@@ -381,8 +383,9 @@ def main(args):
         for key in data_mats_trainval:
             f.create_dataset(key + '_train', dtype='uint32', data=data_mats_trainval[key])
 
-    for key in data_mats_test:
-        f.create_dataset(key + '_test', dtype='uint32', data=data_mats_test[key])
+    if not args.exclude_test: 
+        for key in data_mats_test:
+            f.create_dataset(key + '_test', dtype='uint32', data=data_mats_test[key])
     f.close()
 
     out = {}
@@ -397,7 +400,7 @@ def main(args):
 
     if not args.skip_train: out['unique_img_train'] = get_image_ids(data_train, id2path)
     out['unique_img_val'] = get_image_ids(data_val, id2path)
-    out['unique_img_test'] = get_image_ids(data_test, id2path)
+    if not args.exclude_test: out['unique_img_test'] = get_image_ids(data_test, id2path)
     if args.train_split == 'trainval':
         assert not args.skip_train
         out['unique_img_train'] += out['unique_img_val']
